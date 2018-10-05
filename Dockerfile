@@ -1,18 +1,13 @@
-FROM debian:buster-slim
-
+FROM python:3.7.0-alpine
 MAINTAINER Till von Ahnen "xoryouyou@gmail.com"
 
-ENV DEBIAN_FRONTEND noninteractive 
-ENV DEBCONF_NONINTERACTIVE_SEEN true
+WORKDIR /usr/src/app
 
-RUN apt-get update && apt-get install git python-pip -y &&\
-rm -rf /var/lib/apt/lists/*
+COPY piholeinflux.py .
+COPY requirements.txt .
 
-RUN git clone https://github.com/xoryouyou/pi-hole-influx.git
-WORKDIR pi-hole-influx
 
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN apt-get remove --purge -y git python-pip
 
 CMD ["python", "piholeinflux.py"]
