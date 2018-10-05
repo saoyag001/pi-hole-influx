@@ -2,37 +2,30 @@
 
 from __future__ import print_function
 import requests
-from time import sleep, localtime, strftime
+from time import sleep
 from influxdb import InfluxDBClient
-from configparser import ConfigParser
-from os import path
+from os import path, environ
 import traceback
-import sdnotify
 from datetime import datetime
 import sys
 
-HERE = path.dirname(path.realpath(__file__))
-config = ConfigParser()
-config.read(path.join(HERE, 'config.ini'))
+config = {}
 
-HOSTNAME = config['pihole']['instance_name']
-PIHOLE_API = config['pihole']['api_location']
-DELAY = config['pihole'].getint('reporting_interval', 10)
+def import_env_vars():
+    global config
+    config['INFLUX_HOST'] = environ['INFLUX_HOST']
+    config['INFLUX_PORT'] = environ['INFLUX_PORT']
+    config['INFLUX_USERNAME'] = environ['INFLUX_USERNAME']
+    config['INFLUX_PASSWORD'] = environ['INFLUX_PASSWORD']
+    config['INFLUX_DATABASE'] = environ['INFLUX_DATABASE']
 
-INFLUXDB_SERVER = config['influxdb'].get('hostname', '127.0.0.1')
-INFLUXDB_PORT = config['influxdb'].getint('port', 8086)
-INFLUXDB_USERNAME = config['influxdb']['username']
-INFLUXDB_PASSWORD = config['influxdb']['password']
-INFLUXDB_DATABASE = config['influxdb']['database']
+    config['PIHOLE_API'] = environ['PIHOLE_API']
+    config['PIHOLE_INSTANCE_NAME'] = environ['PIHOLE_INSTANCE_NAME']
 
-INFLUXDB_CLIENT = InfluxDBClient(INFLUXDB_SERVER,
-                                 INFLUXDB_PORT,
-                                 INFLUXDB_USERNAME,
-                                 INFLUXDB_PASSWORD,
-                                 INFLUXDB_DATABASE)
+    config['REPORTING_INTERVAL'] = int(environ['REPORTING_INTERVAL'])
 
-n = sdnotify.SystemdNotifier()
-n.notify("READY=1")
+    return config
+
 
 def send_msg(resp):
     del resp['gravity_last_updated']
@@ -41,7 +34,7 @@ def send_msg(resp):
         {
             "measurement": "pihole",
             "tags": {
-                "host": HOSTNAME
+                "host": config['PIHOLE_INSTANCE_NAME']
             },
             "fields": resp
         }
@@ -51,18 +44,32 @@ def send_msg(resp):
 
 
 if __name__ == '__main__':
+
+    try:
+        config = import_env_vars()
+    except KeyError as e:
+        print("Missing environment variable: %s" % (str(e)))
+        sys.exit(1)
+
+    print("Using config: ",config)
+
+    INFLUXDB_CLIENT = InfluxDBClient(config['INFLUX_HOST'],
+                                    config['INFLUX_PORT'],
+                                    config['INFLUX_USERNAME'],
+                                    config['INFLUX_PASSWORD'],
+                                    config['INFLUX_DATABASE'])
+
+
+
     while True:
         try:
-            api = requests.get(PIHOLE_API)  # URI to pihole server api
+            api = requests.get(config['PIHOLE_API'])  # URI to pihole server api
             send_msg(api.json())
-            timestamp = strftime('%Y-%m-%d %H:%M:%S %z', localtime())
-            n.notify('STATUS=Reported to InfluxDB at {}'.format(timestamp))
 
         except Exception as e:
             msg = 'Failed, to report to InfluxDB:'
-            n.notify('STATUS={} {}'.format(msg, str(e)))
             print(msg, str(e))
             print(traceback.format_exc())
             sys.exit(1)
 
-        sleep(DELAY)
+        sleep(config['REPORTING_INTERVAL'])
