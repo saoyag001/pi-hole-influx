@@ -30,6 +30,12 @@ def import_env_vars():
 def send_msg(resp):
     del resp['gravity_last_updated']
 
+    # force float since sometimes the json contains an integer number without trailing zeros
+    # thus is raises an  {"error":"field type conflict: input field \"ads_percentage_today\" 
+    # on measurement \"pihole\" is type int64, already exists as type float"}
+    
+    resp['ads_percentage_today'] = float(resp['ads_percentage_today'])
+    
     json_body = [
         {
             "measurement": "pihole",
